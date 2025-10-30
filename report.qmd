@@ -1,6 +1,17 @@
 ---
+<<<<<<< HEAD
 title: "EV Power - Lab 4 Project Report"
 format: typst
+=======
+title: "report"
+format: html
+editor: visual
+---
+
+---
+title: "EV Power - Lab 4 Project Report"
+format: pdf
+>>>>>>> 3ec3982 (project 3)
 ---
 
 # Example Solution 1
@@ -8,27 +19,197 @@ format: typst
 ## **Part 0: libraries**
 
 ```{r}
+<<<<<<< HEAD
 
+=======
+library(tidyverse)
+library(janitor)
+library(readr)
+library(stringr)
+library(scales)
+library(maps)
+library(leaflet)
+library(viridis)
+>>>>>>> 3ec3982 (project 3)
 ```
 
 ## **Part 1:** **Defining Research Question**
 
 Chosen Question:
 
+<<<<<<< HEAD
 ## **Part 2: Data Preparation and Cleaning**
 
 ```{r}
 
+=======
+The main research question of this project is:\
+Do electric vehicles actually use clean electricity sources?
+
+To explore this, I propose the following sub-questions:
+
+1.  How has the share of renewable energy changed from 2021 to 2023 across U.S. states?\
+2.  Are states with more EV registrations powered by cleaner energy sources?\
+3.  Do states with higher renewable energy shares have lower or higher average electricity prices?
+
+## **Part 2: Data Preparation and Cleaning**
+
+```{r}
+getwd()
+```
+
+```{r}
+# Renewable energy use by year
+
+abbr_to_name <- setNames(state.name, state.abb)
+abbr_to_name <- c(abbr_to_name, c(DC = "District Of Columbia"))
+to_name <- function(s){
+  a <- toupper(str_trim(s))
+  out <- ifelse(a %in% names(abbr_to_name), abbr_to_name[a], str_to_title(a))
+  str_squish(out)
+}
+
+# ---------- READ ----------
+renew_2021 <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/renew-use-2021.csv", show_col_types = FALSE) |> clean_names()
+renew_2022 <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/renew-use-2022.csv", show_col_types = FALSE) |> clean_names()
+renew_2023 <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/renew-use-2023.csv", show_col_types = FALSE) |> clean_names()
+
+total_2021 <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/total-use-2021.csv", show_col_types = FALSE) |> clean_names()
+total_2022 <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/total-use-2022.csv", show_col_types = FALSE) |> clean_names()
+total_2023 <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/total-use-2023.csv", show_col_types = FALSE) |> clean_names()
+
+price_raw <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/av-energy-price-2021-2023.csv", show_col_types = FALSE) |> clean_names()
+ev_raw    <- read_csv("C:/ev-power-qiguofeng-spec-main/ev-power-qiguofeng-spec-main/data/ev-registrations-by-state-2023.csv", show_col_types = FALSE) |> clean_names()
+
+# ---------- RENEWABLE USE (LONG -> state-year) ----------
+ren_proc <- function(df, yr_col, yr_val){
+  df |>
+    transmute(state = to_name(state),
+              renewable_use = parse_number(.data[[yr_col]]),
+              year = yr_val) |>
+    group_by(state, year) |>
+    summarise(renewable_use = sum(renewable_use, na.rm = TRUE), .groups = "drop")
+}
+renew_2021 <- ren_proc(renew_2021, "renewable_use_2021", 2021)
+renew_2022 <- ren_proc(renew_2022, "renewable_use_2022", 2022)
+renew_2023 <- ren_proc(renew_2023, "renewable_use_2023", 2023)
+renew_all  <- bind_rows(renew_2021, renew_2022, renew_2023)
+
+# ---------- TOTAL USE (WIDE -> LONG -> state-year) ----------
+tot_proc <- function(df, yr_val){
+  st_cols <- setdiff(names(df), c("energy_source","us"))
+  df |>
+    select(all_of(st_cols)) |>
+    pivot_longer(everything(), names_to = "abbr", values_to = "val") |>
+    group_by(abbr) |>
+    summarise(total_use = sum(val, na.rm = TRUE), .groups = "drop") |>
+    mutate(state = to_name(abbr), year = yr_val) |>
+    select(state, year, total_use)
+}
+total_2021 <- tot_proc(total_2021, 2021)
+total_2022 <- tot_proc(total_2022, 2022)
+total_2023 <- tot_proc(total_2023, 2023)
+total_all  <- bind_rows(total_2021, total_2022, total_2023)
+
+# ---------- PRICE 2023 (parse state + number from single text column) ----------
+price_2023 <- price_raw |>
+  rename(text = 1) |>
+  mutate(avg_price = parse_number(text),
+         state = str_trim(str_remove(text, "[0-9].*$"))) |>
+  filter(!is.na(avg_price)) |>
+  mutate(state = str_to_title(state)) |>
+  filter(!str_detect(state, "^Total|^Us$|-")) |>
+  select(state, avg_price)
+
+# ---------- EV 2023 (two columns -> state + numeric) ----------
+ev_2023 <- ev_raw |>
+  rename(state = electric_vehicle_registrations_by_state_2023,
+         ev_registrations = x2) |>
+  mutate(state = str_to_title(str_trim(state)),
+         ev_registrations = parse_number(ev_registrations)) |>
+  filter(!is.na(ev_registrations)) |>
+  select(state, ev_registrations)
+
+# ---------- MERGE & CHECK ----------
+energy_2023 <- renew_all |>
+  filter(year == 2023) |>
+  left_join(total_all |> filter(year == 2023), by = c("state","year")) |>
+  mutate(renewable_share = renewable_use / total_use)
+
+final_2023 <- energy_2023 |>
+  left_join(ev_2023,   by = "state") |>
+  left_join(price_2023, by = "state")
+
+final_2023 |> arrange(desc(renewable_share)) |> head(10)
+>>>>>>> 3ec3982 (project 3)
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
 
 ```{r}
+<<<<<<< HEAD
 
+=======
+energy_all <- renew_all |>
+  left_join(total_all, by = c("state", "year")) |>
+  mutate(renewable_share = renewable_use / total_use)
+
+energy_2023 <- energy_all |>
+  filter(year == 2023)
+
+final_2023 <- energy_2023 |>
+  left_join(ev_2023, by = "state") |>
+  left_join(price_2023, by = "state")
+
+final_2023 <- final_2023 |>
+  mutate(
+    ev_per_energy = ev_registrations / total_use,
+    renewable_ratio = renewable_share * 100
+  )
+
+energy_wide <- energy_all |>
+  select(state, year, renewable_share) |>
+  pivot_wider(names_from = year, values_from = renewable_share, names_prefix = "share_")
+
+write_csv(final_2023, "final_2023_cleaned.csv")
+
+glimpse(final_2023)
+summary(final_2023)
+>>>>>>> 3ec3982 (project 3)
 ```
 
 ## **Part 4: Mapping Visualization**
 
 ```{r}
+<<<<<<< HEAD
 
 ```
+=======
+us_states <- map_data("state")
+
+map_2023 <- us_states |>
+left_join(final_2023 |> mutate(region = tolower(state)), by = "region")
+ggplot(map_2023, aes(long, lat, group = group, fill = renewable_share)) +
+geom_polygon(color = "white", linewidth = 0.2) +
+coord_fixed(1.3) +
+scale_fill_viridis_c(option = "C", labels = percent_format(accuracy = 1), name = "Renewable Share") +
+labs(title = "Renewable Energy Share by State (2023)", subtitle = "DOE data 2021–2023", caption = "STAT 133 Project") +
+theme_minimal() +
+theme(axis.text = element_blank(), axis.title = element_blank(), panel.grid = element_blank())
+
+maps_all <- us_states |>
+left_join(energy_all |> mutate(region = tolower(state)), by = "region")
+ggplot(maps_all, aes(long, lat, group = group, fill = renewable_share)) +
+geom_polygon(color = "white", linewidth = 0.15) +
+coord_fixed(1.3) +
+scale_fill_viridis_c(option = "C", labels = percent_format(accuracy = 1), limits = c(0, max(maps_all$renewable_share, na.rm = TRUE)), name = "Renewable Share") +
+labs(title = "Renewable Energy Share by State (2021–2023)", subtitle = "Faceted by year", caption = "STAT 133 Project") +
+facet_wrap(~year, ncol = 3) +
+theme_minimal() +
+theme(axis.text = element_blank(), axis.title = element_blank(), panel.grid = element_blank(), strip.text = element_text(face = "bold"))
+```
+
+The map shows clear regional differences. States in the Northwest and Midwest, like Washington, Oregon, and Iowa, have the highest renewable energy shares because they use more wind and hydropower. States in the South, like Louisiana and Alabama, still depend on fossil fuels, so their renewable share is much lower.
+
+When we look at EV data, California stands out—it has both a high renewable share and many EVs, showing strong clean energy policies. The map helps show these differences clearly and makes it easy to see how geography and policy affect renewable energy use.
+>>>>>>> 3ec3982 (project 3)
